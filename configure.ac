@@ -521,8 +521,10 @@ case "$host" in
        LIBS="$LIBS -lwinmm"
        AC_DEFINE(WIN32, 1, [Compiling on Windows])
        AC_DEFINE(NOMINMAX, 1, [Prevent <windows.h> from clobbering std::min and std::max])
-       AC_DEFINE(_XOPEN_SOURCE, 700, [Enable X/Open Portability Guide (POSIX 2008).])
-       AC_DEFINE(__USE_MINGW_ANSI_STDIO, 1, [Force ansi stdio.])
+       dnl AC_DEFINE(_XOPEN_SOURCE, 700, [Enable X/Open Portability Guide (POSIX 2008).])
+       dnl AC_DEFINE(__USE_MINGW_ANSI_STDIO, 1, [Force ansi stdio.])
+       CXXFLAGS="$CXXFLAGS -D_XOPEN_SOURCE=700"
+       CFLAGS="$CFLAGS -D_XOPEN_SOURCE=700"
        AC_DEFINE(C_DIRECTSERIAL, 1, [ Define to 1 if you want serial passthrough support (Win32 and Posix).])
        if test x$have_sdl_net_lib = xyes -a x$have_sdl_net_h = xyes ; then
          LIBS="$LIBS -lws2_32"
