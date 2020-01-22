@@ -16,9 +16,10 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-
 #ifndef __CDROM_INTERFACE__
 #define __CDROM_INTERFACE__
+
+#include "dosbox.h"
 
 #include <cstring>
 #include <fstream>
@@ -31,7 +32,6 @@
 #include <SDL.h>
 #include <SDL_thread.h>
 
-#include "dosbox.h"
 #include "mem.h"
 #include "mixer.h"
 #include "../libs/decoders/SDL_sound.h"
