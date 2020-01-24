@@ -680,15 +680,22 @@ dosurface:
 		}
 		/* SDL_PIXELFORMAT_ARGB8888 is possible with most
 		rendering drivers, "opengles" being a notable exception */
-		sdl.texture.texture = SDL_CreateTexture(sdl.renderer, SDL_PIXELFORMAT_ARGB8888,
+		//sdl.texture.texture = SDL_CreateTexture(sdl.renderer, SDL_PIXELFORMAT_ARGB8888,
+		//                                        SDL_TEXTUREACCESS_STREAMING, width, height);
+
+		sdl.texture.texture = SDL_CreateTexture(sdl.renderer, SDL_PIXELFORMAT_BGRA8888,
 		                                        SDL_TEXTUREACCESS_STREAMING, width, height);
+
 		/* SDL_PIXELFORMAT_ABGR8888 (not RGB) is the
 		only supported format for the "opengles" driver */
+		/*
 		if (!sdl.texture.texture) {
 			if (flags & GFX_RGBONLY) goto dosurface;
 			sdl.texture.texture = SDL_CreateTexture(sdl.renderer, SDL_PIXELFORMAT_ABGR8888,
 			                                        SDL_TEXTUREACCESS_STREAMING, width, height);
 		}
+		*/
+
 		if (!sdl.texture.texture) {
 			SDL_DestroyRenderer(sdl.renderer);
 			sdl.renderer = NULL;
