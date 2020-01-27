@@ -17,7 +17,6 @@
  */
 
 
-#include <cstdio>
 #include <string.h>
 #include <math.h>
 #include "dosbox.h"
@@ -198,7 +197,6 @@ static Bit8u * VGA_Draw_Linear_Line(Bitu vidstart, Bitu /*line*/) {
 }
 
 static Bit8u * VGA_Draw_Xlat16_Linear_Line(Bitu vidstart, Bitu /*line*/) {
-	fprintf(stderr, ":: Xlat16\n");
 	Bitu offset = vidstart & vga.draw.linear_mask;
 	Bit8u *ret = &vga.draw.linear_base[offset];
 	Bit16u* temps = (Bit16u*) TempLine;
@@ -1352,8 +1350,6 @@ void VGA_SetupDrawing(Bitu /*val*/) {
 		bpp = 8;
 		break;
 	}
-	fprintf(stderr, ":: bpp %d\n", bpp);
-
 	vga.draw.linear_base = vga.mem.linear;
 	vga.draw.linear_mask = vga.vmemwrap - 1;
 	switch (vga.mode) {
