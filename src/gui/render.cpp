@@ -397,7 +397,20 @@ forcenormal:
 			gfx_flags = (gfx_flags & ~GFX_CAN_8) | GFX_RGBONLY;
 			break;
 	}
-	gfx_flags=GFX_GetBestMode(gfx_flags);
+	gfx_flags=GFX_GetBestMode(gfx_flags); 
+	if
+	(	gfx_flags & GFX_UNITY_SCALE &&
+		complexBlock == 0 &&
+		strstr( simpleBlock->name, "Normal" ) == simpleBlock->name
+	)  
+	// Ant_222 simply setting GFX_SCALING doesn't work
+	// Ant_222: bad idea to set UNITY_SCALE here, because later, in SetSize(),
+	//          we may have to revert to the simple surface mode, but it will be late.
+	{	gfx_scalew = 1.0; gfx_scaleh = 1.0;
+		simpleBlock = &ScaleNormal1x;
+		xscale = 1;
+		yscale = 1;
+	}
 	if (!gfx_flags) {
 		if (!complexBlock && simpleBlock == &ScaleNormal1x) 
 			E_Exit("Failed to create a rendering output");
@@ -418,7 +431,16 @@ forcenormal:
 		}
 	}
 /* Setup the scaler variables */
-	gfx_flags=GFX_SetSize(width,height,gfx_flags,gfx_scalew,gfx_scaleh,&RENDER_CallBack);
+	double par; // the pixel aspect ratio of the source pixel array
+	if( render.aspect ) par = (double)width/height*3/4;
+	else // DOSBox's own dblw and dblh flags are not always correct,
+	     // so let us guesstimate them ourselves:
+	{	double aspect = (double)width/height;
+		     if( aspect < 1.0 ) par = 0.5;
+		else if( aspect > 2.0 ) par = 2.0;
+		else                    par = 1.0;
+	}
+	gfx_flags=GFX_SetSize(width,height,gfx_flags,gfx_scalew,gfx_scaleh,&RENDER_CallBack,par);
 	if (gfx_flags & GFX_CAN_8)
 		render.scale.outMode = scalerMode8;
 	else if (gfx_flags & GFX_CAN_15)

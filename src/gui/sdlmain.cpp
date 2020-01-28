@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <sys/types.h>
+#include <math.h>
 #ifdef WIN32
 #include <signal.h>
 #include <process.h>
@@ -52,6 +53,7 @@
 #include "keyboard.h"
 #include "cpu.h"
 #include "control.h"
+#include "ppscale.h"
 
 #define MAPPERFILE "mapper-sdl2-" VERSION ".map"
 //#define DISABLE_JOYSTICK
@@ -119,6 +121,8 @@ enum SCREEN_TYPES	{
 	SCREEN_OPENGL
 };
 
+enum OutKind {OkNone, OkLinear, OkNearest, OkPerfect};
+
 enum PRIORITY_LEVELS {
 	PRIORITY_LEVEL_PAUSE,
 	PRIORITY_LEVEL_LOWEST,
@@ -128,6 +132,9 @@ enum PRIORITY_LEVELS {
 	PRIORITY_LEVEL_HIGHEST
 };
 
+/* the kind of OpenGL scaling: */
+/* TODO: generalise for both hardware outputs, or for all outputs? */
+enum GlKind { GlkBilinear, GlkNearest, GlkPerfect };
 
 struct SDL_Block {
 	bool inited;
@@ -135,9 +142,11 @@ struct SDL_Block {
 	bool updating;
 	bool update_display_contents;
 	bool resizing_window;
+	OutKind kind;
 	struct {
 		Bit32u width;
 		Bit32u height;
+		double par; /* pixel aspect ratio */
 		Bitu flags;
 		double scalex,scaley;
 		GFX_CallBack_t callback;
@@ -170,7 +179,6 @@ struct SDL_Block {
 		GLuint texture;
 		GLuint displaylist;
 		GLint max_texsize;
-		bool bilinear;
 		bool packed_pixel;
 		bool paletted_texture;
 		bool pixel_buffer_object;
@@ -200,6 +208,8 @@ struct SDL_Block {
 		int ysensitivity;
 		Bitu sensitivity;
 	} mouse;
+	int  ppscale_x, ppscale_y; /* x and y scales for pixel-perfect     */
+	char dbl_h, dbl_w;         /* double-height and double-width flags */
 	SDL_Rect updateRects[1024];
 	Bitu num_joysticks;
 #if defined (WIN32)
@@ -336,6 +346,8 @@ static void PauseDOSBox(bool pressed) {
 
 /* Reset the screen with current values in the sdl structure */
 Bitu GFX_GetBestMode(Bitu flags) {
+	if( sdl.kind == OkPerfect )
+	{	flags |= GFX_UNITY_SCALE;  }
 	switch (sdl.desktop.want_type) {
 	case SCREEN_SURFACE:
 check_surface:
@@ -527,6 +539,9 @@ static SDL_Window * GFX_SetupWindowScaled(SCREEN_TYPES screenType)
 		fixedHeight = sdl.desktop.window.height;
 	}
 
+	LOG_MSG("SetupWindowScaled: fh=%i, fw=%i", fixedHeight, fixedWidth);
+	LOG_MSG("Draw: sx=%5.3g, sy=%5.3g", sdl.draw.scalex, sdl.draw.scaley);
+
 	if (fixedWidth && fixedHeight) {
 		double ratio_w=(double)fixedWidth/(sdl.draw.width*sdl.draw.scalex);
 		double ratio_h=(double)fixedHeight/(sdl.draw.height*sdl.draw.scaley);
@@ -542,16 +557,20 @@ static SDL_Window * GFX_SetupWindowScaled(SCREEN_TYPES screenType)
 			sdl.clip.h=(Bit16u)fixedHeight;
 		}
 
+		LOG_MSG("Clip:%ix%i", sdl.clip.w, sdl.clip.h);
+
 		if (sdl.desktop.fullscreen) {
 			sdl.window = GFX_SetSDLWindowMode(fixedWidth,
 			                                  fixedHeight,
 			                                  sdl.desktop.fullscreen,
 			                                  screenType);
+			LOG_MSG("Fullscreen: %ix%i", fixedWidth, fixedHeight);
 		} else {
 			sdl.window = GFX_SetSDLWindowMode(sdl.clip.w,
 			                                  sdl.clip.h,
 			                                  sdl.desktop.fullscreen,
 			                                  screenType);
+			LOG_MSG("Windowed: %ix%i", fixedWidth, fixedHeight);
 		}
 
 		if (sdl.window && SDL_GetWindowFlags(sdl.window) & SDL_WINDOW_FULLSCREEN) {
@@ -575,15 +594,71 @@ static SDL_Window * GFX_SetupWindowScaled(SCREEN_TYPES screenType)
 	}
 }
 
-Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,GFX_CallBack_t callback) {
+static void GetAvailableArea( Bit16u *width, Bit16u *height, bool *fixed )
+{	*fixed = false;
+	if( sdl.desktop.fullscreen )
+	{	if( sdl.desktop.full.fixed )
+		{	*width  = sdl.desktop.full.width;
+			*height = sdl.desktop.full.height;
+			*fixed  = true;
+		}
+	}
+	else
+	{	if( sdl.desktop.window.width > 0 )
+		{	*width  = sdl.desktop.window.width;
+			*height = sdl.desktop.window.height;
+			LOG_MSG("Window size: %ix%i", sdl.desktop.window.width,
+			sdl.desktop.window.height);
+
+			*fixed  = true;
+		}
+	}
+}
+
+// ATT: aspect is the final aspect ratio of the image including its pixel dimensions and PAR
+static void GetActualArea( Bit16u av_w, Bit16u av_h, Bit16u *w, Bit16u *h, double aspect )
+{	double as_x, as_y;
+	if( aspect > 1.0 )
+	{	as_y = aspect  ; as_x = 1.0;  }
+	else
+	{	as_x = 1.0/aspect; as_y = 1.0;  }
+	if( av_h / as_y < av_w / as_x )
+	{	*h = av_h; *w = round( (double)av_h / aspect );  }
+	else
+	{	*w = av_w; *h = round( (double)av_w * aspect );  }
+}
+
+static void InitPp( Bit16u avw, Bit16u avh )
+{	pp_getscale
+	(	sdl.draw.width, sdl.draw.height,
+		sdl.draw.par,
+		avw, avh, 13.0,
+		&sdl.ppscale_x,
+		&sdl.ppscale_y
+	);
+}
+
+Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,GFX_CallBack_t callback,double par) {
+	bool fixed;
+	Bit16u avw, avh; /* available width and height */
 	if (sdl.updating)
 		GFX_EndUpdate( 0 );
 
+	sdl.draw.par = par;
 	sdl.draw.width=width;
 	sdl.draw.height=height;
 	sdl.draw.callback=callback;
 	sdl.draw.scalex=scalex;
 	sdl.draw.scaley=scaley;
+
+	sdl.dbl_h = ( flags & GFX_DBL_H ) > 0;
+	sdl.dbl_w = ( flags & GFX_DBL_W ) > 0;
+
+	avw = width; avh = height;
+	GetAvailableArea( &avw, &avh, &fixed );	
+	LOG_MSG( "Available area: %ix%i", avw, avh );
+	if( sdl.kind == OkPerfect )
+	{	InitPp( avw, avh );  }
 
 	Bitu retFlags = 0;
 	switch (sdl.desktop.want_type) {
@@ -663,10 +738,29 @@ dosurface:
 		SDL_UpdateWindowSurface(sdl.window);
 		break;
 	case SCREEN_TEXTURE:
-	{
-		if (!GFX_SetupWindowScaled(sdl.desktop.want_type)) {
-			LOG_MSG("SDL:Can't set video mode, falling back to surface");
-			goto dosurface;
+	{	int imgw, imgh, wndw, wndh;
+		if( sdl.kind != OkPerfect )
+		{	if (!GFX_SetupWindowScaled(sdl.desktop.want_type)) {
+				LOG_MSG("SDL:Can't set video mode, falling back to surface");
+				goto dosurface;
+			}
+		}
+		else /* TODO: nearest-neighbor interpolation activated with settings, which is wrong. */
+		{	imgw = sdl.ppscale_x * sdl.draw.width;
+			imgh = sdl.ppscale_y * sdl.draw.height;
+			sdl.clip.w = imgw;
+			sdl.clip.h = imgh;
+			sdl.clip.x = (avw - imgw) / 2;
+			sdl.clip.y = (avh - imgh) / 2;
+
+			if( sdl.desktop.fullscreen )
+			{	wndh = avh;  wndw = avw;   } else
+			{	wndh = imgh; wndw = imgw;  }
+
+			sdl.window = GFX_SetSDLWindowMode
+			(	wndw, wndh,
+				sdl.desktop.fullscreen, SCREEN_TEXTURE);
+
 		}
 		if (strcmp(sdl.rendererDriver, "auto"))
 			SDL_SetHint(SDL_HINT_RENDER_DRIVER, sdl.rendererDriver); 
@@ -789,7 +883,8 @@ dosurface:
 		// No borders
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-		if (!sdl.opengl.bilinear || ( (sdl.clip.h % height) == 0 && (sdl.clip.w % width) == 0) ) {
+		if (sdl.kind != OkNone || ( (sdl.clip.h % height) == 0 && (sdl.clip.w % width) == 0) ) {
+			LOG_MSG("OpenGL: nearest-neighbor");
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		} else {
@@ -1185,6 +1280,47 @@ static void OutputString(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u col
 //extern void UI_Run(bool);
 void Restart(bool pressed);
 
+static int checkstem( const char* value, const char* stem, char* postfix )
+{	int slen, vlen;
+	slen = strlen( stem );
+	vlen = strlen( value );
+	if( slen > vlen )                       return 0;
+	if( strncmp( value, stem, slen ) != 0 ) return 0;
+	strcpy( postfix, value+slen );
+	return 1;
+}
+
+/* TODO: error checking is redundant because the settings mechanisms already */
+/*       does it for us => remove error checking and GOTOs.                  */
+static int parse_outtype
+(	const char* value,
+	SCREEN_TYPES* screen,
+	OutKind*      kind
+) /* Alternative: loop over parallel arrays -- see if takes less code */
+{	char postfix[3];
+	int  ok;
+	ok = 0;
+	if( checkstem( value, "surface",  postfix ) )
+	{	*screen = SCREEN_SURFACE; goto PostFix;  }
+	if( checkstem( value, "texture",  postfix ) )
+	{	*screen = SCREEN_TEXTURE; goto PostFix;  }
+	if( checkstem( value, "opengl",   postfix ) )
+	{	*screen = SCREEN_OPENGL;  goto PostFix;  }
+	goto Error;
+
+PostFix:
+	if( strcmp( postfix, "" )   == 0 )
+	{	*kind = OkNone;    goto Done;  }
+	if( strcmp( postfix, "nb" ) == 0 )
+	{	*kind = OkNearest; goto Done;  }
+	if( strcmp( postfix, "pp" ) == 0 )
+	{	*kind = OkPerfect; goto Done;  }
+	goto Error;
+
+Done:  ok = 1;
+Error: return ok;
+}
+
 static void GUI_StartUp(Section * sec) {
 	sec->AddDestroyFunction(&GUI_ShutDown);
 	Section_prop * section=static_cast<Section_prop *>(sec);
@@ -1292,9 +1428,36 @@ static void GUI_StartUp(Section * sec) {
 	sdl.mouse.ysensitivity = p3->GetSection()->Get_int("ysens");
 	std::string output=section->Get_string("output");
 
-	/* Setup Mouse correctly if fullscreen */
 	if(sdl.desktop.fullscreen) GFX_CaptureMouse();
+	if( !parse_outtype
+	(	output.c_str(),
+		&sdl.desktop.want_type,
+		&sdl.kind
+	))
+	{	LOG_MSG("SDL: Unsupported output device %s, switching back to surface",output.c_str());
+		sdl.desktop.want_type=SCREEN_SURFACE;//SHOULDN'T BE POSSIBLE anymore
+		sdl.kind = OkNone;
+	}
+	else
+	{	char txscalqual[16];
+		switch( sdl.desktop.want_type	)
+		{	case SCREEN_SURFACE: break;
+			case SCREEN_TEXTURE:
+				/* TODO: perform this settings during output initialisaton: */
+				switch( sdl.kind ) 
+				{	case OkNone:    strcpy( txscalqual, "linear" ); break;
+					case OkPerfect:
+					case OkNearest: strcpy( txscalqual, "nearest" ); break;
+				}
+				SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, txscalqual);
+			break;
+		}
+	}
+	LOG_MSG( "want_type: %i, kind: %i", sdl.desktop.want_type, sdl.kind );
 
+	/* Setup Mouse correctly if fullscreen */
+	/*
+	char postfix[3];
 	if (output == "surface") {
 		sdl.desktop.want_type=SCREEN_SURFACE;
 	} else if (output == "texture") {
@@ -1305,17 +1468,18 @@ static void GUI_StartUp(Section * sec) {
 		// Currently the default, but... oh well
 		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 #if C_OPENGL
-	} else if (output == "opengl") {
-		sdl.desktop.want_type=SCREEN_OPENGL;
-		sdl.opengl.bilinear=true;
-	} else if (output == "openglnb") {
-		sdl.desktop.want_type=SCREEN_OPENGL;
-		sdl.opengl.bilinear=false;
+	} else if ( parse_outtype(output.c_str(), "opengl", postfix) )
+	{	sdl.desktop.want_type = SCREEN_OPENGL;
+		     if( postfix == ""   ) sdl.opengl.kind = GlkBilinear;
+		else if( postfix == "nb" ) sdl.opengl.kind = GlkNearest;
+		else if( postfix == "pp" ) sdl.opengl.kind = GlkPerfect;
+		LOG_MSG("OpenGL postfix: %s", postfix );
 #endif
 	} else {
 		LOG_MSG("SDL: Unsupported output device %s, switching back to surface",output.c_str());
 		sdl.desktop.want_type=SCREEN_SURFACE;//SHOULDN'T BE POSSIBLE anymore
 	}
+	*/
 
 	sdl.texture.texture = 0;
 	sdl.texture.pixelFormat = 0;
@@ -1812,6 +1976,7 @@ void Config_Add_SDL() {
 		"surface",
 		"texture",
 		"texturenb",
+		"texturepp",
 #if C_OPENGL
 		"opengl",
 		"openglnb",
