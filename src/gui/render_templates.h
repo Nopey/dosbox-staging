@@ -111,7 +111,8 @@
 #elif DBPP == 16
 #define PMAKE(_VAL) (_VAL)
 #elif DBPP == 32
-#define PMAKE(_VAL)  (((_VAL&(31<<11))<<8)|((_VAL&(63<<5))<<5)|((_VAL&31)<<3))
+//#define PMAKE(_VAL)  (((_VAL&(31<<11))<<8)|((_VAL&(63<<5))<<5)|((_VAL&31)<<3))
+#define PMAKE(_VAL)  ((( __builtin_bswap16(_VAL) & (31<<11))<<8)|(( __builtin_bswap16(_VAL)&(63<<5))<<5)|((__builtin_bswap16(_VAL)&31)<<3))
 #endif
 #define SRCTYPE Bit16u
 #endif
@@ -123,7 +124,8 @@
 #elif DBPP == 16
 #define PMAKE(_VAL) (PTYPE)(((_VAL&(31<<19))>>8)|((_VAL&(63<<10))>>4)|((_VAL&(31<<3))>>3))
 #elif DBPP == 32
-#define PMAKE(_VAL) (_VAL)
+//#define PMAKE(_VAL) (_VAL)
+#define PMAKE(_VAL) __builtin_bswap32(_VAL)
 #endif
 #define SRCTYPE Bit32u
 #endif
