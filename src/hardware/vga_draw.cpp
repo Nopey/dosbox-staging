@@ -17,6 +17,7 @@
  */
 
 
+#include <cstdio>
 #include <string.h>
 #include <math.h>
 #include "dosbox.h"
@@ -138,6 +139,7 @@ static Bit8u * VGA_Draw_4BPP_Line_Double(Bitu vidstart, Bitu line) {
 
 #ifdef VGA_KEEP_CHANGES
 static Bit8u * VGA_Draw_Changes_Line(Bitu vidstart, Bitu line) {
+	fprintf(stderr, "%s\n", __PRETTY_FUNCTION__);
 	Bitu checkMask = vga.changes.checkMask;
 	Bit8u *map = vga.changes.map;
 	Bitu start = (vidstart >> VGA_CHANGE_SHIFT);
@@ -164,10 +166,15 @@ static Bit8u * VGA_Draw_Changes_Line(Bitu vidstart, Bitu line) {
 
 #endif
 
+// WIP
+// this one is selected for 16 and 32-bit mode ??
+//
 static Bit8u * VGA_Draw_Linear_Line(Bitu vidstart, Bitu /*line*/) {
 	Bitu offset = vidstart & vga.draw.linear_mask;
 	Bit8u* ret = &vga.draw.linear_base[offset];
 	
+	fprintf(stderr, "%s offset %lu len %d\n", __PRETTY_FUNCTION__, offset, vga.draw.line_length);
+
 	// in case (vga.draw.line_length + offset) has bits set that
 	// are not set in the mask: ((x|y)!=y) equals (x&~y)
 	if (GCC_UNLIKELY((vga.draw.line_length + offset)& ~vga.draw.linear_mask)) {
@@ -187,6 +194,13 @@ static Bit8u * VGA_Draw_Linear_Line(Bitu vidstart, Bitu /*line*/) {
 		ret = TempLine;
 	}
 
+#if 0
+	auto pixel_line = (uint16_t *)ret;
+	const size_t line_len = vga.draw.line_length / 2;
+	for (uint16_t i = 0; i < line_len; ++i)
+		pixel_line[i] = __builtin_bswap16(pixel_line[i]);
+#endif
+
 #if !defined(C_UNALIGNED_MEMORY)
 	if (GCC_UNLIKELY( ((Bitu)ret) & (sizeof(Bitu)-1)) ) {
 		memcpy( TempLine, ret, vga.draw.line_length );
@@ -197,6 +211,7 @@ static Bit8u * VGA_Draw_Linear_Line(Bitu vidstart, Bitu /*line*/) {
 }
 
 static Bit8u * VGA_Draw_Xlat16_Linear_Line(Bitu vidstart, Bitu /*line*/) {
+	fprintf(stderr, "%s\n", __PRETTY_FUNCTION__);
 	Bitu offset = vidstart & vga.draw.linear_mask;
 	Bit8u *ret = &vga.draw.linear_base[offset];
 	Bit16u* temps = (Bit16u*) TempLine;
@@ -236,6 +251,7 @@ static Bit8u * VGA_Draw_Xlat16_Linear_Line(Bitu vidstart, Bitu /*line*/) {
 } */
 
 static Bit8u * VGA_Draw_VGA_Line_HWMouse( Bitu vidstart, Bitu /*line*/) {
+	fprintf(stderr, "%s\n", __PRETTY_FUNCTION__);
 	if (!svga.hardware_cursor_active || !svga.hardware_cursor_active())
 		// HW Mouse not enabled, use the tried and true call
 		return &vga.mem.linear[vidstart];
@@ -287,6 +303,7 @@ static Bit8u * VGA_Draw_VGA_Line_HWMouse( Bitu vidstart, Bitu /*line*/) {
 }
 
 static Bit8u * VGA_Draw_LIN16_Line_HWMouse(Bitu vidstart, Bitu /*line*/) {
+	fprintf(stderr, "%s\n", __PRETTY_FUNCTION__);
 	if (!svga.hardware_cursor_active || !svga.hardware_cursor_active())
 		return &vga.mem.linear[vidstart];
 
@@ -329,6 +346,7 @@ static Bit8u * VGA_Draw_LIN16_Line_HWMouse(Bitu vidstart, Bitu /*line*/) {
 }
 
 static Bit8u * VGA_Draw_LIN32_Line_HWMouse(Bitu vidstart, Bitu /*line*/) {
+	fprintf(stderr, "%s\n", __PRETTY_FUNCTION__);
 	if (!svga.hardware_cursor_active || !svga.hardware_cursor_active())
 		return &vga.mem.linear[vidstart];
 
@@ -367,6 +385,7 @@ static Bit8u * VGA_Draw_LIN32_Line_HWMouse(Bitu vidstart, Bitu /*line*/) {
 }
 
 static const Bit8u* VGA_Text_Memwrap(Bitu vidstart) {
+	fprintf(stderr, "%s\n", __PRETTY_FUNCTION__);
 	vidstart &= vga.draw.linear_mask;
 	Bitu line_end = 2 * vga.draw.blocks;
 	if (GCC_UNLIKELY((vidstart + line_end) > vga.draw.linear_mask)) {
