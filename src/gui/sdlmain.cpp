@@ -594,13 +594,14 @@ static SDL_Window * GFX_SetupWindowScaled(SCREEN_TYPES screenType)
 	}
 }
 
-static void GetAvailableArea( Bit16u *width, Bit16u *height, bool *fixed )
-{	*fixed = false;
+static void GetAvailableArea( Bit16u *width, Bit16u *height )
+{	bool fixed;
+	fixed = false;
 	if( sdl.desktop.fullscreen )
 	{	if( sdl.desktop.full.fixed )
 		{	*width  = sdl.desktop.full.width;
 			*height = sdl.desktop.full.height;
-			*fixed  = true;
+			fixed  = true;
 		}
 	}
 	else
@@ -610,8 +611,12 @@ static void GetAvailableArea( Bit16u *width, Bit16u *height, bool *fixed )
 			LOG_MSG("Window size: %ix%i", sdl.desktop.window.width,
 			sdl.desktop.window.height);
 
-			*fixed  = true;
+			fixed  = true;
 		}
+	}
+	if( !fixed )
+	{	if( sdl.draw.par > 1.0 ) *width *= sdl.draw.par;
+		if( sdl.draw.par < 1.0 ) *width /= sdl.draw.par;
 	}
 }
 
@@ -632,14 +637,14 @@ static void InitPp( Bit16u avw, Bit16u avh )
 {	pp_getscale
 	(	sdl.draw.width, sdl.draw.height,
 		sdl.draw.par,
-		avw, avh, 13.0,
+		avw, avh, 1.14, /* TODO: consider reading it from the .ini-file */
 		&sdl.ppscale_x,
 		&sdl.ppscale_y
 	);
+
 }
 
 Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,GFX_CallBack_t callback,double par) {
-	bool fixed;
 	Bit16u avw, avh; /* available width and height */
 	if (sdl.updating)
 		GFX_EndUpdate( 0 );
@@ -655,7 +660,9 @@ Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,G
 	sdl.dbl_w = ( flags & GFX_DBL_W ) > 0;
 
 	avw = width; avh = height;
-	GetAvailableArea( &avw, &avh, &fixed );	
+	GetAvailableArea( &avw, &avh );	
+	LOG_MSG( "Input image: %ix%i DW: %i DH: %i PAR: %5.3g",
+		width, height, sdl.dbl_h, sdl.dbl_w, par );
 	LOG_MSG( "Available area: %ix%i", avw, avh );
 	if( sdl.kind == OkPerfect )
 	{	InitPp( avw, avh );  }
@@ -748,14 +755,16 @@ dosurface:
 		else /* TODO: nearest-neighbor interpolation activated with settings, which is wrong. */
 		{	imgw = sdl.ppscale_x * sdl.draw.width;
 			imgh = sdl.ppscale_y * sdl.draw.height;
-			sdl.clip.w = imgw;
-			sdl.clip.h = imgh;
-			sdl.clip.x = (avw - imgw) / 2;
-			sdl.clip.y = (avh - imgh) / 2;
 
 			if( sdl.desktop.fullscreen )
 			{	wndh = avh;  wndw = avw;   } else
 			{	wndh = imgh; wndw = imgw;  }
+
+			sdl.clip.w = imgw;
+			sdl.clip.h = imgh;
+			sdl.clip.x = (wndw - imgw) / 2;
+			sdl.clip.y = (wndh - imgh) / 2;
+
 
 			sdl.window = GFX_SetSDLWindowMode
 			(	wndw, wndh,

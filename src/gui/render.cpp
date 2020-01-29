@@ -440,6 +440,9 @@ forcenormal:
 		else if( aspect > 2.0 ) par = 2.0;
 		else                    par = 1.0;
 	}
+	if( dblh != dblw )
+		if( dblh ) gfx_flags |= GFX_DBL_H; else
+		           gfx_flags |= GFX_DBL_W;
 	gfx_flags=GFX_SetSize(width,height,gfx_flags,gfx_scalew,gfx_scaleh,&RENDER_CallBack,par);
 	if (gfx_flags & GFX_CAN_8)
 		render.scale.outMode = scalerMode8;
