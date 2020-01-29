@@ -121,7 +121,7 @@ enum SCREEN_TYPES	{
 	SCREEN_OPENGL
 };
 
-enum OutKind {OkNone, OkLinear, OkNearest, OkPerfect};
+enum OutKind {OkNone, OkNearest, OkPerfect};
 
 enum PRIORITY_LEVELS {
 	PRIORITY_LEVEL_PAUSE,
@@ -1450,7 +1450,8 @@ static void GUI_StartUp(Section * sec) {
 	else
 	{	char txscalqual[16];
 		switch( sdl.desktop.want_type	)
-		{	case SCREEN_SURFACE: break;
+		{	case SCREEN_SURFACE: break; /* dummy cases, introduced mere to avoid */
+			case SCREEN_OPENGL:  break; /* a warning about incomplete coverage...*/
 			case SCREEN_TEXTURE:
 				/* TODO: perform this settings during output initialisaton: */
 				switch( sdl.kind ) 
