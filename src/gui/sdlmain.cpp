@@ -621,17 +621,17 @@ static void GetAvailableArea( Bit16u *width, Bit16u *height )
 }
 
 // ATT: aspect is the final aspect ratio of the image including its pixel dimensions and PAR
-static void GetActualArea( Bit16u av_w, Bit16u av_h, Bit16u *w, Bit16u *h, double aspect )
+/*static void GetActualArea( Bit16u av_w, Bit16u av_h, Bit16u *w, Bit16u *h, double aspect )
 {	double as_x, as_y;
+
 	if( aspect > 1.0 )
-	{	as_y = aspect  ; as_x = 1.0;  }
-	else
+	{	as_y =     aspect; as_x = 1.0;  } else
 	{	as_x = 1.0/aspect; as_y = 1.0;  }
+
 	if( av_h / as_y < av_w / as_x )
-	{	*h = av_h; *w = round( (double)av_h / aspect );  }
-	else
+	{	*h = av_h; *w = round( (double)av_h / aspect );  } else
 	{	*w = av_w; *h = round( (double)av_w * aspect );  }
-}
+}*/
 
 static void InitPp( Bit16u avw, Bit16u avh )
 {	pp_getscale
@@ -662,7 +662,7 @@ Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,G
 	avw = width; avh = height;
 	GetAvailableArea( &avw, &avh );	
 	LOG_MSG( "Input image: %ix%i DW: %i DH: %i PAR: %5.3g",
-		width, height, sdl.dbl_h, sdl.dbl_w, par );
+		(int)width, (int)height, sdl.dbl_h, sdl.dbl_w, par );
 	LOG_MSG( "Available area: %ix%i", avw, avh );
 	if( sdl.kind == OkPerfect )
 	{	InitPp( avw, avh );  }
