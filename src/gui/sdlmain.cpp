@@ -1289,40 +1289,46 @@ static void OutputString(Bitu x,Bitu y,const char * text,Bit32u color,Bit32u col
 //extern void UI_Run(bool);
 void Restart(bool pressed);
 
-static int checkstem( const char* value, const char* stem, char* postfix )
-{	int slen, vlen;
-	slen = strlen( stem );
+/* Tokenise a string into a stem and a postfix: */
+static int tok_stem( const char* value, const char* stem, char* postfix )
+{	int slen, vlen; /* stem and value lengths */
+
+	slen = strlen( stem  );
 	vlen = strlen( value );
+
 	if( slen > vlen )                       return 0;
 	if( strncmp( value, stem, slen ) != 0 ) return 0;
+
 	strcpy( postfix, value+slen );
 	return 1;
 }
 
-/* TODO: error checking is redundant because the settings mechanisms already */
-/*       does it for us => remove error checking and GOTOs.                  */
+/* TODO: error checking is redundant because the settings mechanism already */
+/*       does it for us => remove error checking and the GOTOs.             */
 static int parse_outtype
-(	const char* value,
-	SCREEN_TYPES* screen,
-	OutKind*      kind
+(	const char         *value,
+	      SCREEN_TYPES *screen,
+	      OutKind      *kind
 ) /* Alternative: loop over parallel arrays -- see if takes less code */
 {	char postfix[3];
 	int  ok;
+
 	ok = 0;
-	if( checkstem( value, "surface",  postfix ) )
+
+	if( tok_stem( value, "surface",   postfix ) )
 	{	*screen = SCREEN_SURFACE; goto PostFix;  }
-	if( checkstem( value, "texture",  postfix ) )
+	if( tok_stem( value, "texture",   postfix ) )
 	{	*screen = SCREEN_TEXTURE; goto PostFix;  }
-	if( checkstem( value, "opengl",   postfix ) )
+	if( tok_stem( value, "opengl" ,   postfix ) )
 	{	*screen = SCREEN_OPENGL;  goto PostFix;  }
 	goto Error;
 
 PostFix:
-	if( strcmp( postfix, "" )   == 0 )
+	if( strcmp( postfix, ""   ) == 0  )
 	{	*kind = OkNone;    goto Done;  }
-	if( strcmp( postfix, "nb" ) == 0 )
+	if( strcmp( postfix, "nb" ) == 0  )
 	{	*kind = OkNearest; goto Done;  }
-	if( strcmp( postfix, "pp" ) == 0 )
+	if( strcmp( postfix, "pp" ) == 0  )
 	{	*kind = OkPerfect; goto Done;  }
 	goto Error;
 
